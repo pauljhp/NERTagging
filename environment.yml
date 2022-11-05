@@ -1,0 +1,10 @@
+name: nertag_env
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.8
+  - conda-forge::pytorch-lightning
+  - conda-forge::transformers
+  - defai;ts::pandas
+prefix: /opt/miniconda3/envs/nertag_env
