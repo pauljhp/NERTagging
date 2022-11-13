@@ -1,11 +1,11 @@
-import pytorch_lightning as pl
+# import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 import math
 import numpy as np
-from typing import (Sequence, Iterable, Dict, Tuple, Callable)
+from typing import (Sequence, Iterable, Dict, Tuple, Callable, Optional)
 
 from dataset.dataset import NERDataset
 from torch.utils.data import DataLoader
@@ -16,11 +16,11 @@ logging.basicConfig(filename="./log/exceptions.log")
 LOGGER = logging.getLogger()
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-class TranformerTagger(nn.modules):
+class TransformerTagger(nn.Module):
     def __init__(self, 
         d_model: int=512,
-        n_head: int=8,
-        vocab_size: int=23000,
+        nhead: int=8,
+        vocab_size: int=30000,
         num_encoder_layers: int=8,
         num_decoder_layers: int=8,
         dim_feedforward: int=1024,
@@ -30,13 +30,57 @@ class TranformerTagger(nn.modules):
         activation: Callable=F.relu,
         batch_first: bool=True,
         device: str=DEVICE,
+        n_tags: int=9
         ):
+        super(TransformerTagger, self).__init__()
+        assert d_model >= n_tags, "d_model must be higher than number of tags"
         self.d_model = d_model
+        self.no_dense_layers = no_dense_layers
         self.positional_encoder = PositionalEncoder(d_model, dropout)
         self.embedding = get_embedder(embedding_type, 
-            um_embeddings=vocab_size, 
-            embedding_dim=d_model)
+            num_embeddings=vocab_size, 
+            embedding_dim=d_model,)
+        self.transformer = nn.Transformer(
+            d_model=d_model,
+            nhead=nhead,
+            num_encoder_layers=num_encoder_layers,
+            num_decoder_layers=num_decoder_layers,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            activation=activation,
+            batch_first=batch_first,
+        )
+        increment = math.floor(
+            (d_model // n_tags) ** (1 / no_dense_layers)
+            )
+        in_features, out_features = d_model, d_model // increment
+        for i in range(1, no_dense_layers):
+            exec(f"""self.dense{i} = nn.Linear(in_features=in_features, 
+                out_features=out_features)""")
+            in_features, out_features = out_features, \
+                out_features // increment
+        exec(f"""self.dense{no_dense_layers} = nn.Linear(in_features=in_features, 
+                out_features=n_tags)""")
 
+        self.softmax = nn.Softmax(dim=-1)
+
+    def forward(self, source: torch.tensor, target: Optional[torch.tensor]=None):
+        source = self.embedding(source) * math.sqrt(self.d_model)
+        source = self.positional_encoder(source)
+        if target is not None:
+            target = self.embedding(target) * math.sqrt(self.d_model)
+            target = self.positional_encoder(target)
+        else: target = source
+        dense_in = self.transformer(source, target)
+        for i in range(1, self.no_dense_layers + 1):
+            out = eval(f"self.dense{i}(dense_in)")
+            dense_in = out
+
+        out_prob = self.softmax(out)
+        return out_prob
+
+    def __call__(self, source, target=None):
+        return self.forward(source, target)
 
 # classes not included directly in torch
 
@@ -57,53 +101,9 @@ class PositionalEncoder(nn.Module):
         self.register_buffer('positional_encoder', pe)
 
     def forward(self, x):
-        x = x + self.pe[:x.size(0), :]
+        x = x + self.positional_encoder[:x.size(0), :]
         return self.dropout(x)
 
-
-
-
-class MultiheadAttention(nn.Module):
-    def __init__(self, input_dim, embed_dim, num_heads):
-        super(MultiheadAttention, self).__init__()
-        assert embed_dim % num_heads == 0, "Embed_dim must be multiples of num_heads!"
-
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.head_dim = embed_dim // num_heads
-
-        # Stack all weight matrices 1...h together for efficiency
-        # Note that in many implementations you see "bias=False" which is optional
-        self.qkv_proj = nn.Linear(input_dim, 3 * embed_dim)
-        self.o_proj = nn.Linear(embed_dim, embed_dim)
-        self._reset_parameters()
-
-    def _reset_parameters(self):
-        # Original Transformer initialization, see PyTorch documentation
-        nn.init.xavier_uniform_(self.qkv_proj.weight)
-        self.qkv_proj.bias.data.fill_(0)
-        nn.init.xavier_uniform_(self.o_proj.weight)
-        self.o_proj.bias.data.fill_(0)
-
-    def forward(self, x, mask=None, return_attention=False):
-        batch_size, seq_length, embed_dim = x.size()
-        qkv = self.qkv_proj(x)
-
-        # Separate Q, K, V from linear output
-        qkv = qkv.reshape(batch_size, seq_length, self.num_heads, 3 * self.head_dim)
-        qkv = qkv.permute(0, 2, 1, 3)  # [Batch, Head, SeqLen, Dims]
-        q, k, v = qkv.chunk(3, dim=-1)
-
-        # Determine value outputs
-        values, attention = scaled_dot_product_attention(q, k, v, mask=mask)
-        values = values.permute(0, 2, 1, 3)  # [Batch, SeqLen, Head, Dims]
-        values = values.reshape(batch_size, seq_length, embed_dim)
-        o = self.o_proj(values)
-
-        if return_attention:
-            return o, attention
-        else:
-            return o
 
 
 # custom functions
