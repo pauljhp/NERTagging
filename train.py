@@ -88,6 +88,7 @@ train_dataloader = DataLoader(train_data,
     batch_size=BATCH_SIZE, 
     collate_fn=collate_fn
         )
+
 val_dataloader = DataLoader(test_data, 
     shuffle=True, 
     batch_size=BATCH_SIZE, 
@@ -97,7 +98,9 @@ val_dataloader = DataLoader(test_data,
 model = TransformerTagger(d_model=128, 
     n_tags=train_data.ntargets, 
     vocab_size=train_data.vocab_size + 1,
-    nhead=8, batch_first=True, no_dense_layers=3)
+    nhead=8, batch_first=True, no_dense_layers=3,
+    pad_token_idx=train_data._tokenidx.get(train_data.pad_token))
+
 optimizer = optim.Adam(params=model.parameters(), 
     lr=BASE_LR,
     eps=1e-5,

@@ -18,6 +18,7 @@ DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 class TransformerTagger(nn.Module):
     def __init__(self, 
+        pad_token_idx: int,
         d_model: int=512,
         nhead: int=8,
         vocab_size: int=30000,
@@ -26,20 +27,21 @@ class TransformerTagger(nn.Module):
         dim_feedforward: int=1024,
         dropout: float=.1,
         embedding_type: str="torch",
-        no_dense_layers: int = 5,
+        no_dense_layers: int=5,
         activation: Callable=F.relu,
         batch_first: bool=True,
-        device: str=DEVICE,
-        n_tags: int=9
+        # device: str=DEVICE,
+        n_tags: int=10,
         ):
         super(TransformerTagger, self).__init__()
         assert d_model >= n_tags, "d_model must be higher than number of tags"
         self.d_model = d_model
         self.no_dense_layers = no_dense_layers
         self.positional_encoder = PositionalEncoder(d_model, dropout)
-        self.embedding = get_embedder(embedding_type, 
-            num_embeddings=vocab_size, 
-            embedding_dim=d_model,)
+        self.embedding = WordEmbedding(vocab_size=vocab_size,
+            embedding_dim=d_model,
+            embedding=embedding_type, 
+            pad_token_idx=pad_token_idx)
         self.transformer = nn.Transformer(
             d_model=d_model,
             nhead=nhead,
@@ -106,7 +108,7 @@ class PositionalEncoder(nn.Module):
 
 
 
-# custom functions
+# custom functions and classes
 
 def scaled_dot_product_attention(q, k, v, mask=None) -> Tuple[torch.tensor, torch.tensor]:
     d_k = q.size()[-1]
@@ -126,3 +128,30 @@ def get_embedder(embedding: str="torch", **kwargs):
     else:
         raise NotImplementedError
     return embedder
+
+class WordEmbedding(nn.Module):
+    def __init__(self, 
+        vocab_size: int,
+        embedding_dim: int,
+        pad_token_idx: int,
+        embedding: str="torch",
+        ):
+        """
+        :param vocab_size: vocabulary size
+        :param embedding_dim: dimensionality of the embeddings
+        :param embedding: str, takes "torch", "glove", "pytorch" 
+            (same as "torch"), and "bert"
+        """
+        super(WordEmbedding, self).__init__()
+        self.embedding = get_embedder(embedding, 
+            num_embeddings=vocab_size, 
+            embedding_dim=embedding_dim)
+        self.embedding_dim = embedding_dim
+        self.pad_token_id = pad_token_idx
+        
+    def forward(self, x: torch.tensor):
+        x_ = self.embedding(x)
+        mask = torch.where(x==self.pad_token_idx, True, False)
+        mask = mask.unsqueeze(0).permute(1, 2, 0).repeat(1, 1, self.embedding_dim)
+        x_ = torch.masked_fill(x_, mask, value=torch.tensor(float("-inf")))
+        return x_
