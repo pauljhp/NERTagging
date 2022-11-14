@@ -66,14 +66,23 @@ class TransformerTagger(nn.Module):
 
         self.softmax = nn.Softmax(dim=-1)
 
-    def forward(self, source: torch.tensor, target: Optional[torch.tensor]=None):
+    def forward(self, 
+        source: torch.tensor, 
+        target: Optional[torch.tensor]=None,
+        src_key_padding_mask: Optional[torch.tensor]=None,
+        tgt_key_padding_mask: Optional[torch.tensor]=None,
+        ):
         source = self.embedding(source) * math.sqrt(self.d_model)
         source = self.positional_encoder(source)
         if target is not None:
             target = self.embedding(target) * math.sqrt(self.d_model)
             target = self.positional_encoder(target)
         else: target = source
-        dense_in = self.transformer(source, target)
+        if tgt_key_padding_mask is None:
+            tgt_key_padding_mask = src_key_padding_mask
+        dense_in = self.transformer(source, target,
+            src_key_padding_mask=src_key_padding_mask,
+            tgt_key_padding_mask=tgt_key_padding_mask)
         for i in range(1, self.no_dense_layers + 1):
             out = eval(f"self.dense{i}(dense_in)")
             dense_in = out
@@ -81,8 +90,12 @@ class TransformerTagger(nn.Module):
         out_prob = self.softmax(out)
         return out_prob
 
-    def __call__(self, source, target=None):
-        return self.forward(source, target)
+    def __call__(self, 
+        source: torch.tensor, 
+        target: Optional[torch.tensor]=None,
+        src_key_padding_mask: Optional[torch.tensor]=None,
+        tgt_key_padding_mask: Optional[torch.tensor]=None,):
+        return self.forward(source, target, src_key_padding_mask, tgt_key_padding_mask)
 
 # classes not included directly in torch
 
@@ -147,11 +160,11 @@ class WordEmbedding(nn.Module):
             num_embeddings=vocab_size, 
             embedding_dim=embedding_dim)
         self.embedding_dim = embedding_dim
-        self.pad_token_id = pad_token_idx
+        self.pad_token_idx = pad_token_idx
         
     def forward(self, x: torch.tensor):
         x_ = self.embedding(x)
         mask = torch.where(x==self.pad_token_idx, True, False)
         mask = mask.unsqueeze(0).permute(1, 2, 0).repeat(1, 1, self.embedding_dim)
-        x_ = torch.masked_fill(x_, mask, value=torch.tensor(float("-inf")))
+        x_ = torch.masked_fill(x_, mask, value=torch.tensor(-1e5, dtype=torch.float64))
         return x_

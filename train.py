@@ -19,6 +19,8 @@ from torch.utils.tensorboard import SummaryWriter
 from torchmetrics import F1Score, Accuracy, Precision, Recall
 import utils
 import time
+from pathlib import Path
+
 
 train_data = NERDataset(tokenizer="spacy", cased=False, mode='train')
 test_data = NERDataset(tokenizer="spacy", cased=False, mode='test')
@@ -32,7 +34,7 @@ BATCH_SIZE = 256
 BASE_LR = 1e-3
 MAX_EPOCHS = 20
 # RUN_NO = 1
-LOG_DIR = "./log/traininglog"
+LOG_DIR = "./log/traininglog/"
 MINIBATCH_SIZE = 16
 SAVE_EVERY = 5
 
@@ -46,6 +48,11 @@ parser.add_argument("-r", "--runno", type=int)
 parser.add_argument("-m", "--minibatch_size", type=int, default=MINIBATCH_SIZE)
 parser.add_argument("-s", "--save_every", default=SAVE_EVERY)
 parser.add_argument("-c", "--checkpoint_dir", default=None)
+parser.add_argument("--nhead", type=int, default=8)
+parser.add_argument("--d_model", type=int, default=128)
+parser.add_argument("--no_dense_layers", type=int, default=5)
+parser.add_argument("-v", "--verbose", action="store_true")
+
 
 args = parser.parse_args()
 batch_size = args.batch_size
@@ -58,7 +65,14 @@ save_every = args.save_every
 
 SAVE_DIR = f"./checkpoints/{TODAY}_runo{runno}.pt"
 save_dir = args.checkpoint_dir if args.checkpoint_dir else SAVE_DIR
-WRITER = SummaryWriter(log_dir=f"{log_dir}/{TODAY}_runno_{runno}")
+log_dir = Path(log_dir).joinpath(
+        f"{TODAY}/runno_{runno}_lr{base_lr:.6f}_{max_epochs}epochs_{args.d_model}dims_{args.no_dense_layers}denselayers_{args.nhead}heads")
+
+if not log_dir.parent.exists():
+    log_dir.parent.mkdir(parents=True, exist_ok=True)
+WRITER = SummaryWriter(
+    log_dir=log_dir.as_posix()
+        )
 
 
 f1 = F1Score(num_classes=10, threshold=0.5)
@@ -73,15 +87,18 @@ def collate_fn(data: Sequence[Tuple],
     n_classes: int=train_data.ntargets,
     feature_padding_value=feature_padding_value,
     tag_padding_value=tag_padding_value,):
-    """:return: features, target_prob, target"""
+    """:return: features, target_prob, target, mask (save dims as target_prob)"""
     features, target_prob, targets = zip(*data)
     features = pad_sequence(features, batch_first=True, padding_value=feature_padding_value)
     targets = pad_sequence(targets, batch_first=True, padding_value=tag_padding_value)
     max_len = targets.shape[1]
     batch_size=targets.shape[0]
-    target_prob = utils.pad_target_prob(target_prob, n_classes - 1, max_len, n_classes, batch_size)
+    target_prob, target_mask = utils.pad_target_prob(target_prob, n_classes - 1, max_len, n_classes, batch_size)
 
-    return features.long(), target_prob.to(torch.float64), targets.long()
+    return (
+        features.long(), target_prob.to(torch.float64), 
+        targets.long(), target_mask.bool()
+        )
 
 train_dataloader = DataLoader(train_data, 
     shuffle=True, 
@@ -89,16 +106,17 @@ train_dataloader = DataLoader(train_data,
     collate_fn=collate_fn
         )
 
-val_dataloader = DataLoader(test_data, 
+val_dataloader = DataLoader(val_data, 
     shuffle=True, 
     batch_size=BATCH_SIZE, 
     collate_fn=collate_fn
         )
 
-model = TransformerTagger(d_model=128, 
+model = TransformerTagger(d_model=args.d_model, 
     n_tags=train_data.ntargets, 
     vocab_size=train_data.vocab_size + 1,
-    nhead=8, batch_first=True, no_dense_layers=3,
+    nhead=args.nhead, batch_first=True, 
+    no_dense_layers=args.no_dense_layers,
     pad_token_idx=train_data._tokenidx.get(train_data.pad_token))
 
 optimizer = optim.Adam(params=model.parameters(), 
@@ -111,14 +129,14 @@ start = time.time()
 
 global_step = 0
 for epoch in range(max_epochs):
-    print(f"running epoch {epoch}")
+    if args.verbose: print(f"running epoch {epoch}")
     running_loss = 0.
     model.train()
     for i, data in enumerate(train_dataloader):
         print(f"iter_no{i}")
         optimizer.zero_grad()
-        src, tag_prob, tags = data
-        pred = model(src, src)
+        src, tag_prob, tags, mask = data
+        pred = model(src, src, mask)
         loss = criterion(pred, tag_prob)
         loss.backward()
         optimizer.step()
@@ -130,7 +148,7 @@ for epoch in range(max_epochs):
                 walltime=time.time()-start,
                 global_step=global_step)
             running_loss = 0
-    print(f"finished epoch {epoch}\n------\n")
+    if args.verbose: print(f"finished epoch {epoch}\n------\n")
     if epoch % save_every == save_every - 1:
         torch.save(model.state_dict(), f=save_dir)
         model.eval()
@@ -138,8 +156,8 @@ for epoch in range(max_epochs):
             = 0., 0., 0., 0., 0.
         counter = 0.
         for i, data in enumerate(val_dataloader):
-            src, tag_prob, tags = data
-            pred = model(src, src)
+            src, tag_prob, tags, mask = data
+            pred = model(src, src, mask)
             loss = criterion(pred, tag_prob)
             running_loss += loss.item()
             for j, (pred, truth) in enumerate(zip(pred, tag_prob)):
@@ -149,7 +167,8 @@ for epoch in range(max_epochs):
                 running_accu += accu(pred, truth.long()).item()
                 counter += j
             if i % minibatch_size == minibatch_size - 1:
-                print(f"{epoch}, pass{i}; validation_loss={running_loss};\nvalidation_precision={running_precision / counter}")
+                if args.verbose:
+                    print(f"epoch{epoch}, iter{i}; validation_loss={running_loss};\nvalidation_precision={running_precision / counter}")
                 WRITER.add_scalar("val/loss", running_loss, 
                     walltime=time.time()-start,
                     global_step=global_step)
