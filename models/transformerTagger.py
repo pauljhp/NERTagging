@@ -30,6 +30,7 @@ class TransformerTagger(nn.Module):
         no_dense_layers: int=5,
         activation: Callable=F.relu,
         batch_first: bool=True,
+        layer_norm_eps: float=1e-4,
         # device: str=DEVICE,
         n_tags: int=10,
         ):
@@ -51,6 +52,8 @@ class TransformerTagger(nn.Module):
             dropout=dropout,
             activation=activation,
             batch_first=batch_first,
+            layer_norm_eps=layer_norm_eps,
+            norm_first=True,
         )
         increment = math.floor(
             (d_model // n_tags) ** (1 / no_dense_layers)
@@ -158,13 +161,16 @@ class WordEmbedding(nn.Module):
         super(WordEmbedding, self).__init__()
         self.embedding = get_embedder(embedding, 
             num_embeddings=vocab_size, 
-            embedding_dim=embedding_dim)
+            embedding_dim=embedding_dim,
+            padding_idx=pad_token_idx,
+            max_norm=1e2,
+            norm_type=2.0)
         self.embedding_dim = embedding_dim
         self.pad_token_idx = pad_token_idx
         
     def forward(self, x: torch.tensor):
         x_ = self.embedding(x)
-        mask = torch.where(x==self.pad_token_idx, True, False)
-        mask = mask.unsqueeze(0).permute(1, 2, 0).repeat(1, 1, self.embedding_dim)
-        x_ = torch.masked_fill(x_, mask, value=torch.tensor(-1e5, dtype=torch.float64))
+        # mask = torch.where(x==self.pad_token_idx, True, False)
+        # mask = mask.unsqueeze(0).permute(1, 2, 0).repeat(1, 1, self.embedding_dim)
+        # x_ = torch.masked_fill(x_, mask, value=torch.tensor(-1e3, dtype=torch.float64))
         return x_

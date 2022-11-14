@@ -4,4 +4,5 @@ python train.py --runno 1 \
     --verbose \
     --nhead 8 \
     --no_dense_layers 3 \
-    --d_model 128
+    --d_model 128 \
+    --detect_anomaly

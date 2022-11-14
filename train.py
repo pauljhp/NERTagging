@@ -51,8 +51,10 @@ parser.add_argument("-c", "--checkpoint_dir", default=None)
 parser.add_argument("--nhead", type=int, default=8)
 parser.add_argument("--d_model", type=int, default=128)
 parser.add_argument("--no_dense_layers", type=int, default=5)
+parser.add_argument("--layer_norm_eps", type=float, default=1e-4)
 parser.add_argument("-v", "--verbose", action="store_true")
-
+parser.add_argument("--detect_anomaly", action="store_true")
+parser.add_argument("--enable_autocast", action="store_true")
 
 args = parser.parse_args()
 batch_size = args.batch_size
@@ -67,6 +69,9 @@ SAVE_DIR = f"./checkpoints/{TODAY}_runo{runno}.pt"
 save_dir = args.checkpoint_dir if args.checkpoint_dir else SAVE_DIR
 log_dir = Path(log_dir).joinpath(
         f"{TODAY}/runno_{runno}_lr{base_lr:.6f}_{max_epochs}epochs_{args.d_model}dims_{args.no_dense_layers}denselayers_{args.nhead}heads")
+torch.autograd.set_detect_anomaly(args.detect_anomaly)
+torch.cuda.amp.autocast(enabled=args.enable_autocast)
+
 
 if not log_dir.parent.exists():
     log_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -115,7 +120,9 @@ val_dataloader = DataLoader(val_data,
 model = TransformerTagger(d_model=args.d_model, 
     n_tags=train_data.ntargets, 
     vocab_size=train_data.vocab_size + 1,
-    nhead=args.nhead, batch_first=True, 
+    layer_norm_eps=args.layer_norm_eps,
+    nhead=args.nhead, 
+    batch_first=True, 
     no_dense_layers=args.no_dense_layers,
     pad_token_idx=train_data._tokenidx.get(train_data.pad_token))
 
@@ -137,17 +144,35 @@ for epoch in range(max_epochs):
         optimizer.zero_grad()
         src, tag_prob, tags, mask = data
         pred = model(src, src, mask)
+        pred = torch.masked_fill(pred, 
+            mask.unsqueeze(-1).repeat(1, 1, pred.shape[-1]),
+            torch.tensor(0., dtype=torch.float32)) # mask padded output
+        tag_prob = torch.masked_fill(tag_prob, 
+            mask.unsqueeze(-1).repeat(1, 1, tag_prob.shape[-1]), 
+            torch.tensor(0., dtype=torch.float32)) # mask padded true values
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 
+            max_norm=1e2, 
+            norm_type=2.0, 
+            error_if_nonfinite=False) # try clipping large weights
         loss = criterion(pred, tag_prob)
         loss.backward()
         optimizer.step()
         running_loss += loss.item()
+        WRITER.add_scalar("train/loss", loss.item(), 
+                walltime=time.time()-start,
+                global_step=global_step)
+        global_step += i
         if i % minibatch_size == minibatch_size - 1:
-            print(f"{epoch}, pass{i}; loss={running_loss}")
-            global_step += i
-            WRITER.add_scalar("train/loss", running_loss, 
+            print(f"epoch{epoch}, pass{i}; loss={running_loss / i}")
+            WRITER.add_scalar("train/loss", running_loss / i, 
                 walltime=time.time()-start,
                 global_step=global_step)
             running_loss = 0
+    for tag, value in model.named_parameters():
+        if value.grad is not None:
+            WRITER.add_histogram(tag + "/grad", value.grad.cpu(), 
+            walltime=time.time()-start,
+            global_step=global_step)
     if args.verbose: print(f"finished epoch {epoch}\n------\n")
     if epoch % save_every == save_every - 1:
         torch.save(model.state_dict(), f=save_dir)
