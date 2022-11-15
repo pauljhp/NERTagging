@@ -32,12 +32,13 @@ class TransformerTagger(nn.Module):
         batch_first: bool=True,
         layer_norm_eps: float=1e-4,
         # device: str=DEVICE,
-        n_tags: int=10,
+        n_tags: int=9,
         ):
         super(TransformerTagger, self).__init__()
         assert d_model >= n_tags, "d_model must be higher than number of tags"
         self.d_model = d_model
         self.no_dense_layers = no_dense_layers
+        self.pad_token_idx = pad_token_idx
         self.positional_encoder = PositionalEncoder(d_model, dropout)
         self.embedding = WordEmbedding(vocab_size=vocab_size,
             embedding_dim=d_model,
@@ -68,6 +69,7 @@ class TransformerTagger(nn.Module):
                 out_features=n_tags)""")
 
         self.softmax = nn.Softmax(dim=-1)
+        self.logsoftmax = nn.LogSoftmax(dim=-1)
 
     def forward(self, 
         source: torch.tensor, 
@@ -86,8 +88,12 @@ class TransformerTagger(nn.Module):
         dense_in = self.transformer(source, target,
             src_key_padding_mask=src_key_padding_mask,
             tgt_key_padding_mask=tgt_key_padding_mask)
+        dense_in = torch.sigmoid(dense_in)
+        dense_in = torch.clip(dense_in, min=-0.99999, max=0.99999)
         for i in range(1, self.no_dense_layers + 1):
             out = eval(f"self.dense{i}(dense_in)")
+            out = torch.sigmoid(out)
+            out = torch.clip(out, min=-0.99999, max=0.99999)
             dense_in = out
 
         out_prob = self.softmax(out)

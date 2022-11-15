@@ -83,21 +83,23 @@ class NERDataset(Dataset):
                 pad_token: len(self._vocab) + 2}) # assign -inf to <PAD>
             self._token_lookup.append(unk_token)
             self._token_lookup.append(pad_token)
-            with Path(f"./embedding/{tokenizer}_{mode}_{'cased' if cased else 'uncased'}_{TODAY}") as f:
+            with Path(f"./embeddings/{tokenizer}_{mode}_{'cased' if cased else 'uncased'}_{TODAY}").open("w") as f:
                 json.dump(self._tokenidx, f)
-        targetidx_path = Path("./embedding/nertag_idx.json")
+        targetidx_path = Path("./embeddings/nertag_idx.json")
         if targetidx_path.exists():
             with targetidx_path.open("r") as f:
                 self._targetidx = json.load(f)
             self._targets = set(self._targetidx.keys())
-            self.ntargets = len(self._targets)
+            self.ntargets = len(self._targets) - 1 # remove <PAD>
         else:
             self._targets = set(itertools.chain(*self.data.loc[:, target_col]))
-            self.ntargets = len(self._targets) + 1 # add <PAD>
+            self.ntargets = len(self._targets)
             self._target_lookup = list(self._targets)
-            self._targetidx = dict([(tgt, i) for i, tgt 
+            self._targetidx = dict([(tgt, i + 1) for i, tgt 
                 in enumerate(self._target_lookup)])
-            self._targetidx.update({self.pad_token: self.ntargets}) # very small integer for <PAD>
+            self._targetidx.update({self.pad_token: 0}) # very small integer for <PAD>
+            with targetidx_path.open("w") as f:
+                json.dump(self._targetidx, f)
         self.data.loc[:, "DOCSTART"] = self.data.DOCSTART.apply(
             lambda x: self._tokenize(x, cased=cased))
         self.data.loc[:, "target_idx"] = self.data.loc[:, target_col].apply(
@@ -108,6 +110,8 @@ class NERDataset(Dataset):
                     if t in self._vocab else self._tokenidx.get(unk_token)
                     for t in x],
                 dtype=self.dtype))
+        self.data = self.data.loc[
+            self.data.target_idx.apply(lambda x: True if len(x) > 0 else False)] # filter out empty entries]
 
     def get_token_from_idx(self, 
         token_idx: Union[Sequence[int], int]) -> Union[str, List[str]]:
@@ -124,7 +128,7 @@ class NERDataset(Dataset):
         """:returns: features, tag_prob, tags"""
         features, tags = tuple(self.data.loc[idx, ["text_idx", "target_idx"]].values)
         tag_prob = utils.tagidx_to_prob(tags, self.ntargets, self.float_dtype)
-        return (features, tag_prob, tags)
+        return (features, tag_prob, tags, idx)
 
     def __len__(self):
         return self.data.shape[0]
