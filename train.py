@@ -139,7 +139,7 @@ optimizer = optim.Adam(params=model.parameters(),
     eps=1e-5,
     betas=(0.9, 0.99))
 
-criterion = nn.CrossEntropyLoss()
+criterion = nn.CrossEntropyLoss(ignore_index=0, reduction='mean')
 start = time.time()
 
 global_step = 0
@@ -154,37 +154,30 @@ try:
             print(f"iter_no{i}")
             optimizer.zero_grad()
             idx, src, tag_prob, tags, mask = data
-            # try:
-            pred = model(src, src, mask)
-            pred = torch.masked_fill(pred, 
-                mask.unsqueeze(-1).repeat(1, 1, pred.shape[-1]),
-                torch.tensor(0., dtype=torch.float32)) # mask padded output
-            tag_prob = torch.masked_fill(tag_prob, 
-                mask.unsqueeze(-1).repeat(1, 1, tag_prob.shape[-1]), 
-                torch.tensor(0., dtype=torch.float32)) # mask padded true values
-            tags = torch.masked_fill(tags, mask, torch.tensor(0., dtype=torch.float32))
+            pred = model(src, src, mask)    
+            loss = criterion(pred[~mask], tags[~mask])
+            for j, (prd, truth, mk) in enumerate(zip(pred, tags, mask)):
+                # loss += criterion(prd[~mk], truth.masked_select(~mk).long())
+                train_precision += precision(prd[~mk], truth.masked_select(~mk).long()).item()
+                train_recall += recall(prd[~mk], truth.masked_select(~mk).long()).item()
+                train_f1 += f1(prd[~mk], truth.masked_select(~mk).long()).item()
+                train_accu += accu(prd[~mk], truth.masked_select(~mk).long()).item()
+                counter += 1
+            loss.backward()
+            optimizer.step()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 
                 max_norm=1e2, 
                 norm_type=2.0, 
-                error_if_nonfinite=False) # try clipping large weights
-            loss = criterion(pred, tag_prob)
-            loss.backward()
-            optimizer.step()
+                error_if_nonfinite=False) # gradient clipping
             running_loss += loss.item()
             WRITER.add_scalar("train/loss", loss.item(), 
                     walltime=time.time()-start,
                     global_step=global_step)
-            for j, (pred, truth) in enumerate(zip(pred, tag_prob)):
-                    train_precision += precision(pred, truth.long()).item()
-                    train_recall += recall(pred, truth.long()).item()
-                    train_f1 += f1(pred, truth.long()).item()
-                    train_accu += accu(pred, truth.long()).item()
-                    counter += j
             
-            global_step += i
+            global_step += 1
             if i % minibatch_size == minibatch_size - 1:
-                print(f"epoch{epoch}, pass{i}; loss={running_loss / i}")
-                WRITER.add_scalar("train/loss", running_loss / i, 
+                print(f"epoch{epoch}, pass{i}; loss={running_loss / minibatch_size}")
+                WRITER.add_scalar("train/loss", running_loss / minibatch_size, 
                     walltime=time.time()-start,
                     global_step=global_step)
                 WRITER.add_scalar("train/accuracy", train_accu / counter, 
@@ -215,39 +208,31 @@ try:
                 = 0., 0., 0., 0., 0.
             counter = 0.
             for i, data in enumerate(val_dataloader):
-                src, tag_prob, tags, mask = data
+                idx, src, tag_prob, tags, mask = data
                 pred = model(src, src, mask)
-                pred = torch.masked_fill(pred, 
-                mask.unsqueeze(-1).repeat(1, 1, pred.shape[-1]),
-                    torch.tensor(0, dtype=torch.float32)) # mask padded output
-                tag_prob = torch.masked_fill(tag_prob, 
-                    mask.unsqueeze(-1).repeat(1, 1, tag_prob.shape[-1]), 
-                    torch.tensor(0, dtype=torch.float32)) # mask padded true values
-                tags = torch.masked_fill(tags, mask, torch.tensor(0., dtype=torch.float32))
-                loss = criterion(pred, tag_prob)
-                running_loss += loss.item()
-                for j, (pred, truth) in enumerate(zip(pred, tag_prob)):
-                    running_precision += precision(pred, truth.long()).item()
-                    running_recall += recall(pred, truth.long()).item()
-                    running_f1 += f1(pred, truth.long()).item()
-                    running_accu += accu(pred, truth.long()).item()
-                    counter += j
+                for j, (prd, truth, mk) in enumerate(zip(pred, tags, mask)):
+                    losses.append(criterion(prd[~mk], truth.masked_select(~mk).long()))
+                    train_precision += precision(prd[~mk], truth.masked_select(~mk).long()).item()
+                    train_recall += recall(prd[~mk], truth.masked_select(~mk).long()).item()
+                    train_f1 += f1(prd[~mk], truth.masked_select(~mk).long()).item()
+                    train_accu += accu(prd[~mk], truth.masked_select(~mk).long()).item()
+                    counter += 1
                 if i % minibatch_size == minibatch_size - 1:
                     if args.verbose:
                         print(f"epoch{epoch}, iter{i}; validation_loss={running_loss};\nvalidation_precision={running_precision / counter}")
                     WRITER.add_scalar("val/loss", running_loss, 
                         walltime=time.time()-start,
                         global_step=global_step)
-                    WRITER.add_scaler("val/precision", running_precision / counter,
+                    WRITER.add_scalar("val/precision", running_precision / counter,
                         walltime=time.time()-start,
                         global_step=global_step)
-                    WRITER.add_scaler("val/recall", running_recall / counter,
+                    WRITER.add_scalar("val/recall", running_recall / counter,
                         walltime=time.time()-start,
                         global_step=global_step)
-                    WRITER.add_scaler("val/f1", running_f1 / counter,
+                    WRITER.add_scalar("val/f1", running_f1 / counter,
                         walltime=time.time()-start,
                         global_step=global_step)
-                    WRITER.add_scaler("val/accuracy", running_accu / counter,
+                    WRITER.add_scalar("val/accuracy", running_accu / counter,
                         walltime=time.time()-start,
                         global_step=global_step)
                     running_loss, running_precision, running_recall, running_f1, running_accu \

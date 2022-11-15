@@ -90,14 +90,14 @@ class NERDataset(Dataset):
             with targetidx_path.open("r") as f:
                 self._targetidx = json.load(f)
             self._targets = set(self._targetidx.keys())
-            self.ntargets = len(self._targets) - 1 # remove <PAD>
+            self.ntargets = len(self._targets) 
         else:
             self._targets = set(itertools.chain(*self.data.loc[:, target_col]))
-            self.ntargets = len(self._targets)
+            self.ntargets = len(self._targets) + 1 # Plus <PAD>
             self._target_lookup = list(self._targets)
             self._targetidx = dict([(tgt, i + 1) for i, tgt 
                 in enumerate(self._target_lookup)])
-            self._targetidx.update({self.pad_token: 0}) # very small integer for <PAD>
+            self._targetidx.update({self.pad_token: 0}) # index <PAD> at 0
             with targetidx_path.open("w") as f:
                 json.dump(self._targetidx, f)
         self.data.loc[:, "DOCSTART"] = self.data.DOCSTART.apply(
