@@ -8,7 +8,6 @@ import torch.nn.functional as F
 from typing import Tuple, Sequence
 import torch.optim as optim
 import torch.nn as nn
-import torch
 from models.transformerTagger import TransformerTagger
 from models.transformerTagger import PositionalEncoder
 from torch.utils.data import DataLoader
@@ -211,7 +210,6 @@ try:
                 idx, src, tag_prob, tags, mask = data
                 pred = model(src, src, mask)
                 for j, (prd, truth, mk) in enumerate(zip(pred, tags, mask)):
-                    losses.append(criterion(prd[~mk], truth.masked_select(~mk).long()))
                     train_precision += precision(prd[~mk], truth.masked_select(~mk).long()).item()
                     train_recall += recall(prd[~mk], truth.masked_select(~mk).long()).item()
                     train_f1 += f1(prd[~mk], truth.masked_select(~mk).long()).item()
