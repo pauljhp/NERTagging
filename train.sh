@@ -1,10 +1,10 @@
-python train.py --runno 11 \
+python train.py --runno 5 \
     --max_epochs 50 \
     --base_lr 0.0005 \
     --verbose \
     --nhead 16 \
-    --no_dense_layers 5 \
-    --d_model 512 \
+    --no_dense_layers 7 \
+    --d_model 256 \
     --detect_anomaly \
     --enable_autocast \
     --layer_norm_eps 0.01 \

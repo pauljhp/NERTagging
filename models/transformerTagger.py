@@ -32,7 +32,7 @@ class TransformerTagger(nn.Module):
         batch_first: bool=True,
         layer_norm_eps: float=1e-4,
         # device: str=DEVICE,
-        n_tags: int=9,
+        n_tags: int=10,
         ):
         super(TransformerTagger, self).__init__()
         assert d_model >= n_tags, "d_model must be higher than number of tags"
@@ -88,12 +88,12 @@ class TransformerTagger(nn.Module):
         dense_in = self.transformer(source, target,
             src_key_padding_mask=src_key_padding_mask,
             tgt_key_padding_mask=tgt_key_padding_mask)
-        dense_in = torch.sigmoid(dense_in)
-        dense_in = torch.clip(dense_in, min=-0.99999, max=0.99999)
+        # dense_in = torch.relu(dense_in) # experiment with this
+        # dense_in = torch.clip(dense_in, min=-0.99999, max=0.99999)
         for i in range(1, self.no_dense_layers + 1):
             out = eval(f"self.dense{i}(dense_in)")
-            out = torch.sigmoid(out)
-            out = torch.clip(out, min=-0.99999, max=0.99999)
+            out = torch.tanh(out)
+            # out = torch.clip(out, min=-0.99999, max=0.99999)
             dense_in = out
 
         out_prob = self.softmax(out)
@@ -113,7 +113,7 @@ class PositionalEncoder(nn.Module):
     def __init__(self, 
         d_model: int, 
         dropout: float=0.1, 
-        max_len: int=10000):
+        max_len: int=1000):
         super(PositionalEncoder, self).__init__()
         self.dropout = nn.Dropout(p=dropout)
         pe = torch.zeros(max_len, d_model) 

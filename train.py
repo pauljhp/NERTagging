@@ -20,6 +20,9 @@ import utils
 import time
 from pathlib import Path
 import logging
+from collections import Counter
+import itertools
+import pandas as pd
 
 
 logger_path = Path("./log/exceptions.log")
@@ -29,11 +32,17 @@ logging.basicConfig(filename=logger_path.as_posix())
 logger = logging.getLogger()
 
 train_data = NERDataset(tokenizer="spacy", cased=False, mode='train')
-test_data = NERDataset(tokenizer="spacy", cased=False, mode='test')
+# test_data = NERDataset(tokenizer="spacy", cased=False, mode='test')
 val_data = NERDataset(tokenizer="spacy", cased=False, mode='valid')
 
-TODAY = dt.datetime.today().strftime("%Y-%m-%d")
+# for countering the umbalanced classes
+class_weights = pd.Series(Counter(itertools.chain(*[[i.item() for i in t] 
+    for t in train_data.data.target_idx])))
+class_weights = 1 / (class_weights ** 0.8)
+class_weights.loc[0] = 0
+class_weights = torch.tensor(class_weights.sort_index().values).float()
 
+TODAY = dt.datetime.today().strftime("%Y-%m-%d")
 
 
 BATCH_SIZE = 256
@@ -71,7 +80,7 @@ runno = args.runno
 minibatch_size = args.minibatch_size
 save_every = args.save_every
 
-SAVE_DIR = f"./checkpoints/{TODAY}_runo{runno}.pt"
+SAVE_DIR = f"./checkpoints/{TODAY}_runno{runno}.pt"
 save_dir = args.checkpoint_dir if args.checkpoint_dir else SAVE_DIR
 log_dir = Path(log_dir).joinpath(
         f"{TODAY}/runno_{runno}_lr{base_lr:.6f}_{max_epochs}epochs_{args.d_model}dims_{args.no_dense_layers}denselayers_{args.nhead}heads")
@@ -138,7 +147,9 @@ optimizer = optim.Adam(params=model.parameters(),
     eps=1e-5,
     betas=(0.9, 0.99))
 
-criterion = nn.CrossEntropyLoss(ignore_index=0, reduction='mean')
+criterion = nn.CrossEntropyLoss(ignore_index=0, 
+    weight=class_weights, 
+    reduction='mean')
 start = time.time()
 
 global_step = 0
@@ -201,7 +212,9 @@ try:
                 global_step=global_step)
         if args.verbose: print(f"finished epoch {epoch}\n------\n")
         if epoch % save_every == save_every - 1:
-            torch.save(model.state_dict(), f=save_dir)
+            save_p = Path(save_dir)
+            save_p = save_p.parent.joinpath(f"{save_p.stem}_epoch{epoch}.pt")
+            torch.save(model.state_dict(), f=save_p.as_posix())
             model.eval()
             running_loss, running_precision, running_recall, running_f1, running_accu \
                 = 0., 0., 0., 0., 0.
@@ -215,27 +228,27 @@ try:
                     train_f1 += f1(prd[~mk], truth.masked_select(~mk).long()).item()
                     train_accu += accu(prd[~mk], truth.masked_select(~mk).long()).item()
                     counter += 1
-                if i % minibatch_size == minibatch_size - 1:
-                    if args.verbose:
-                        print(f"epoch{epoch}, iter{i}; validation_loss={running_loss};\nvalidation_precision={running_precision / counter}")
-                    WRITER.add_scalar("val/loss", running_loss, 
-                        walltime=time.time()-start,
-                        global_step=global_step)
-                    WRITER.add_scalar("val/precision", running_precision / counter,
-                        walltime=time.time()-start,
-                        global_step=global_step)
-                    WRITER.add_scalar("val/recall", running_recall / counter,
-                        walltime=time.time()-start,
-                        global_step=global_step)
-                    WRITER.add_scalar("val/f1", running_f1 / counter,
-                        walltime=time.time()-start,
-                        global_step=global_step)
-                    WRITER.add_scalar("val/accuracy", running_accu / counter,
-                        walltime=time.time()-start,
-                        global_step=global_step)
-                    running_loss, running_precision, running_recall, running_f1, running_accu \
-                    = 0., 0., 0., 0., 0.
-                    counter = 0.
+                # if i % minibatch_size == minibatch_size - 1:
+                if args.verbose:
+                    print(f"epoch{epoch}, iter{i}; validation_loss={running_loss};\nvalidation_precision={running_precision / counter}")
+                WRITER.add_scalar("val/loss", running_loss, 
+                    walltime=time.time()-start,
+                    global_step=global_step)
+                WRITER.add_scalar("val/precision", running_precision / counter,
+                    walltime=time.time()-start,
+                    global_step=global_step)
+                WRITER.add_scalar("val/recall", running_recall / counter,
+                    walltime=time.time()-start,
+                    global_step=global_step)
+                WRITER.add_scalar("val/f1", running_f1 / counter,
+                    walltime=time.time()-start,
+                    global_step=global_step)
+                WRITER.add_scalar("val/accuracy", running_accu / counter,
+                    walltime=time.time()-start,
+                    global_step=global_step)
+                running_loss, running_precision, running_recall, running_f1, running_accu \
+                = 0., 0., 0., 0., 0.
+                counter = 0.
 except RuntimeError as exception:
     logger.exception(msg=f"{exception}\n-----\nduring the following dataset id: {idx}\n=======\n")
     logger.info(msg=f"output: {pred}")

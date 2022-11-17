@@ -90,7 +90,8 @@ class NERDataset(Dataset):
             with targetidx_path.open("r") as f:
                 self._targetidx = json.load(f)
             self._targets = set(self._targetidx.keys())
-            self.ntargets = len(self._targets) 
+            self.ntargets = len(self._targets)
+            self._target_lookup = {v: k for k, v in self._targetidx.items()}
         else:
             self._targets = set(itertools.chain(*self.data.loc[:, target_col]))
             self.ntargets = len(self._targets) + 1 # Plus <PAD>
