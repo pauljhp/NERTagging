@@ -38,7 +38,7 @@ val_data = NERDataset(tokenizer="spacy", cased=False, mode='valid')
 # for countering the umbalanced classes
 class_weights = pd.Series(Counter(itertools.chain(*[[i.item() for i in t] 
     for t in train_data.data.target_idx])))
-class_weights = 1 / (class_weights ** 0.8)
+class_weights = 1 / (class_weights ** 0.95)
 class_weights.loc[0] = 0
 class_weights = torch.tensor(class_weights.sort_index().values).float()
 

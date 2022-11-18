@@ -1,6 +1,6 @@
-python train.py --runno 5 \
-    --max_epochs 50 \
-    --base_lr 0.0005 \
+python train.py --runno 1 \
+    --max_epochs 100 \
+    --base_lr 0.001 \
     --verbose \
     --nhead 16 \
     --no_dense_layers 7 \
