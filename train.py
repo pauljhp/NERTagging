@@ -9,7 +9,7 @@ from typing import Tuple, Sequence
 import torch.optim as optim
 import torch.nn as nn
 from models.transformerTagger import TransformerTagger
-from models.transformerTagger import PositionalEncoder
+from models.lstmTagger import LSTMTagger
 from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 import torch
@@ -25,11 +25,7 @@ import itertools
 import pandas as pd
 
 
-logger_path = Path("./log/exceptions.log")
-if not logger_path.exists():
-    logger_path.parents.mkdir(parents=True)
-logging.basicConfig(filename=logger_path.as_posix())
-logger = logging.getLogger()
+
 
 train_data = NERDataset(tokenizer="spacy", cased=False, mode='train')
 # test_data = NERDataset(tokenizer="spacy", cased=False, mode='test')
@@ -38,12 +34,16 @@ val_data = NERDataset(tokenizer="spacy", cased=False, mode='valid')
 # for countering the umbalanced classes
 class_weights = pd.Series(Counter(itertools.chain(*[[i.item() for i in t] 
     for t in train_data.data.target_idx])))
-class_weights = 1 / (class_weights ** 0.95)
+class_weights = 1 / (class_weights ** 1)
 class_weights.loc[0] = 0
 class_weights = torch.tensor(class_weights.sort_index().values).float()
 
 TODAY = dt.datetime.today().strftime("%Y-%m-%d")
-
+logger_path = Path(f"./log/exceptions_{TODAY}.log")
+if not logger_path.exists():
+    logger_path.parents.mkdir(parents=True)
+logging.basicConfig(filename=logger_path.as_posix())
+logger = logging.getLogger()
 
 BATCH_SIZE = 256
 BASE_LR = 1e-3
@@ -61,9 +61,12 @@ parser.add_argument("-e", "--max_epochs", type=int, default=20)
 parser.add_argument("-d", "--logdir", type=str, default=LOG_DIR)
 parser.add_argument("-r", "--runno", type=int)
 parser.add_argument("-m", "--minibatch_size", type=int, default=MINIBATCH_SIZE)
+parser.add_argument("--model_type", dest="model_type", type=str)
 parser.add_argument("-s", "--save_every", default=SAVE_EVERY)
 parser.add_argument("-c", "--checkpoint_dir", default=None)
 parser.add_argument("--nhead", type=int, default=8)
+parser.add_argument("--num_encoder_layers", type=int, default=8)
+parser.add_argument("--num_decoder_layers", type=int, default=8)
 parser.add_argument("--d_model", type=int, default=128)
 parser.add_argument("--no_dense_layers", type=int, default=5)
 parser.add_argument("--layer_norm_eps", type=float, default=1e-4)
@@ -80,10 +83,10 @@ runno = args.runno
 minibatch_size = args.minibatch_size
 save_every = args.save_every
 
-SAVE_DIR = f"./checkpoints/{TODAY}_runno{runno}.pt"
+SAVE_DIR = f"./checkpoints/{args.model_type}_dim{args.d_model}_d{args.no_dense_layers}_{TODAY}_runno{runno}.pt"
 save_dir = args.checkpoint_dir if args.checkpoint_dir else SAVE_DIR
 log_dir = Path(log_dir).joinpath(
-        f"{TODAY}/runno_{runno}_lr{base_lr:.6f}_{max_epochs}epochs_{args.d_model}dims_{args.no_dense_layers}denselayers_{args.nhead}heads")
+        f"{TODAY}/{args.model_type}_runno_{runno}_lr{base_lr:.6f}_{max_epochs}epochs_{args.d_model}dims_{args.no_dense_layers}denselayers_{args.nhead}heads")
 torch.autograd.set_detect_anomaly(args.detect_anomaly)
 torch.cuda.amp.autocast(enabled=args.enable_autocast)
 
@@ -131,16 +134,28 @@ val_dataloader = DataLoader(val_data,
     batch_size=batch_size, 
     collate_fn=collate_fn
         )
-
-model = TransformerTagger(d_model=args.d_model, 
-    n_tags=train_data.ntargets, 
-    vocab_size=train_data.vocab_size + 1,
-    layer_norm_eps=args.layer_norm_eps,
-    activation=torch.tanh,
-    nhead=args.nhead, 
-    batch_first=True, 
-    no_dense_layers=args.no_dense_layers,
-    pad_token_idx=train_data._tokenidx.get(train_data.pad_token))
+if args.model_type.lower() in ["transformer", "tranformertagger"]:
+    model = TransformerTagger(d_model=args.d_model, 
+        n_tags=train_data.ntargets, 
+        vocab_size=train_data.vocab_size + 1,
+        layer_norm_eps=args.layer_norm_eps,
+        activation=torch.tanh,
+        nhead=args.nhead, 
+        batch_first=True, 
+        no_dense_layers=args.no_dense_layers,
+        pad_token_idx=train_data._tokenidx.get(train_data.pad_token)
+    )
+elif args.model_type.lower() in ["lstm", "lstmtagger"]:
+    model = LSTMTagger(d_model=args.d_model,
+        n_tags=train_data.ntargets, 
+        vocab_size=train_data.vocab_size + 1,
+        layer_norm_eps=args.layer_norm_eps,
+        activation=torch.tanh,
+        nhead=args.nhead, 
+        batch_first=True, 
+        no_dense_layers=args.no_dense_layers,
+        pad_token_idx=train_data._tokenidx.get(train_data.pad_token)
+    )
 
 optimizer = optim.Adam(params=model.parameters(), 
     lr=BASE_LR,
@@ -246,9 +261,10 @@ try:
                 WRITER.add_scalar("val/accuracy", running_accu / counter,
                     walltime=time.time()-start,
                     global_step=global_step)
-                running_loss, running_precision, running_recall, running_f1, running_accu \
-                = 0., 0., 0., 0., 0.
-                counter = 0.
+            running_loss, running_precision, running_recall, running_f1, running_accu \
+            = 0., 0., 0., 0., 0.
+            counter = 0.
+
 except RuntimeError as exception:
     logger.exception(msg=f"{exception}\n-----\nduring the following dataset id: {idx}\n=======\n")
     logger.info(msg=f"output: {pred}")
