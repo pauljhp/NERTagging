@@ -107,7 +107,9 @@ recall = Recall(num_classes=train_data.ntargets, threshold=0.5)
 feature_padding_value = train_data._tokenidx.get(train_data.pad_token)
 tag_padding_value = train_data._targetidx.get(train_data.pad_token)
 
-def collate_fn(data: Sequence[Tuple], 
+def collate_fn(
+    data: Sequence[Tuple], 
+    device: torch.device=DEVICE,
     n_classes: int=train_data.ntargets,
     feature_padding_value=feature_padding_value,
     tag_padding_value=tag_padding_value,):
@@ -120,8 +122,8 @@ def collate_fn(data: Sequence[Tuple],
     target_prob, target_mask = utils.pad_target_prob(target_prob, n_classes - 1, max_len, n_classes, batch_size)
 
     return (idx,
-        features.long(), target_prob.to(torch.float64), 
-        targets.long(), target_mask.bool()
+        features.long().to(device), target_prob.to(torch.float64).to(device), 
+        targets.long().to(device), target_mask.bool().to(device)
         )
 
 train_dataloader = DataLoader(train_data, 
@@ -191,6 +193,7 @@ try:
             elif args.model_type.lower() in ["transformer", "transformertagger"]:
                 pred = model(src, src, mask)
             else: raise ValueError("model type not recognized")
+            print(mask.dtype, pred.dtype)
             loss = criterion(pred[~mask], tags[~mask])
             for j, (prd, truth, mk) in enumerate(zip(pred, tags, mask)):
                 # loss += criterion(prd[~mk], truth.masked_select(~mk).long())
