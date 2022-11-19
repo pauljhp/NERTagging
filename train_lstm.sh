@@ -1,12 +1,12 @@
-python train.py --runno 1 \
+python train.py --runno 2 \
     --model_type lstm \
     --max_epochs 100 \
-    --base_lr 0.001 \
+    --base_lr 0.005 \
     --verbose \
-    --num_decoder_layers 8 \
-    --num_encoder_layers 10 \
+    --num_decoder_layers 5 \
+    --num_encoder_layers 5 \
     --num_dense_layers 7 \
-    --d_model 256 \
+    --d_model 512 \
     --detect_anomaly \
     --enable_autocast \
     --layer_norm_eps 0.01 \

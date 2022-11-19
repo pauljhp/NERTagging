@@ -30,8 +30,10 @@ class LSTMTagger(nn.Module):
         bidirectional: bool=True,
         proj_size: int=0,
         n_tags: int=10,
+        device: torch.device=DEVICE,
         ):
         super(LSTMTagger, self).__init__()
+        self.device = device
         self.lstmdecoder_exists = True if num_decoder_layers > 0 else False
         assert d_model >= n_tags, "d_model must be higher than number of tags"
         self.d_model = d_model
@@ -85,18 +87,20 @@ class LSTMTagger(nn.Module):
         input: torch.tensor, 
         mask: Optional[torch.tensor]=None,
         ):
-        input = self.embedding(input) * math.sqrt(self.d_model)
+        input = self.embedding(input.to(self.device)) * math.sqrt(self.d_model)
         input = self.positional_encoder(input)
         if mask is not None:
             mask = mask.unsqueeze(-1).repeat(1, 1, input.shape[-1])
-            mask = torch.where(mask, torch.tensor(- 2. ** 32), torch.tensor(0.))
+            mask = torch.where(mask, 
+                torch.tensor(- 2. ** 32).to(self.device), 
+                torch.tensor(0.).to(self.device))
             input += mask
         encoder_output, (encoder_h, _) = self.LSTMEncoder(input)
-        print(input.shape)
+        # print(input.shape)
         print(encoder_output.shape, encoder_h.shape)
         if self.lstmdecoder_exists:
             decoder_input = self.avgpool(encoder_output)
-            print(decoder_input.shape)
+            # print(decoder_input.shape)
             decoder_output, _ = self.LSTMDecoder(decoder_input)
             dense_in = decoder_output
         else:

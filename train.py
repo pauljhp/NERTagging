@@ -162,6 +162,7 @@ elif args.model_type.lower() in ["lstm", "lstmtagger"]:
         num_decoder_layers=args.num_decoder_layers,
         num_encoder_layers=args.num_encoder_layers,
         input_size=args.lstm_input_size,
+        device=DEVICE
     )
 else: raise ValueError("model type not recognized")
 model = model.to(DEVICE)
