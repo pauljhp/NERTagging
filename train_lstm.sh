@@ -1,0 +1,14 @@
+python train.py --runno 1 \
+    --model_type lstm \
+    --max_epochs 100 \
+    --base_lr 0.001 \
+    --verbose \
+    --no_decoder_layers 8 \
+    --no_encoder_layers 10 \
+    --no_dense_layers 7 \
+    --d_model 256 \
+    --detect_anomaly \
+    --enable_autocast \
+    --layer_norm_eps 0.01 \
+    --batch_size 256
+    --lstm_input_size 64\

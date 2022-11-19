@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from embedding import WordEmbedding
+from models.embedding import WordEmbedding
 import math
 import numpy as np
 from typing import (Sequence, Iterable, Dict, Tuple, Callable, Optional)
@@ -22,6 +22,7 @@ class LSTMTagger(nn.Module):
         dropout: float=.1,
         embedding_type: str="torch",
         no_dense_layers: int=5,
+        input_size: int=64, 
         activation: Callable=F.relu,
         batch_first: bool=True,
         layer_norm_eps: float=1e-4,
@@ -38,16 +39,15 @@ class LSTMTagger(nn.Module):
         self.pad_token_idx = pad_token_idx
         self.positional_encoder = PositionalEncoder(d_model, dropout)
         self.embedding = WordEmbedding(vocab_size=vocab_size,
-            embedding_dim=d_model,
+            embedding_dim=input_size,
             embedding=embedding_type, 
             pad_token_idx=pad_token_idx)
         self.LSTMEncoder = nn.LSTM(
+            input_size=input_size,
             hidden_size=d_model,
             num_layers=num_encoder_layers,
-            num_decoder_layers=num_decoder_layers,
             proj_size=proj_size,
             dropout=dropout,
-            activation=activation,
             batch_first=batch_first,
             bias=bias,
             bidirectional=bidirectional
@@ -56,10 +56,9 @@ class LSTMTagger(nn.Module):
             self.LSTMDecoder = nn.LSTM(
                 hidden_size=d_model,
                 num_layers=num_decoder_layers,
-                num_decoder_layers=num_decoder_layers,
                 proj_size=proj_size,
+                input_size=input_size,
                 dropout=dropout,
-                activation=activation,
                 batch_first=batch_first,
                 bias=bias,
                 bidirectional=bidirectional

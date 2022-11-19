@@ -67,6 +67,7 @@ parser.add_argument("-c", "--checkpoint_dir", default=None)
 parser.add_argument("--nhead", type=int, default=8)
 parser.add_argument("--num_encoder_layers", type=int, default=8)
 parser.add_argument("--num_decoder_layers", type=int, default=8)
+parser.add_argument("--lstm_input_size", type=int, default=64)
 parser.add_argument("--d_model", type=int, default=128)
 parser.add_argument("--no_dense_layers", type=int, default=5)
 parser.add_argument("--layer_norm_eps", type=float, default=1e-4)
@@ -139,6 +140,8 @@ if args.model_type.lower() in ["transformer", "tranformertagger"]:
         n_tags=train_data.ntargets, 
         vocab_size=train_data.vocab_size + 1,
         layer_norm_eps=args.layer_norm_eps,
+        num_decoder_layers=args.num_decoder_layers,
+        num_encoder_layers=args.num_encoder_layers,
         activation=torch.tanh,
         nhead=args.nhead, 
         batch_first=True, 
@@ -151,10 +154,12 @@ elif args.model_type.lower() in ["lstm", "lstmtagger"]:
         vocab_size=train_data.vocab_size + 1,
         layer_norm_eps=args.layer_norm_eps,
         activation=torch.tanh,
-        nhead=args.nhead, 
         batch_first=True, 
         no_dense_layers=args.no_dense_layers,
-        pad_token_idx=train_data._tokenidx.get(train_data.pad_token)
+        pad_token_idx=train_data._tokenidx.get(train_data.pad_token),
+        num_decoder_layers=args.num_decoder_layers,
+        num_encoder_layers=args.num_encoder_layers,
+        input_size=args.lstm_input_size,
     )
 
 optimizer = optim.Adam(params=model.parameters(), 
