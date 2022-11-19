@@ -164,7 +164,7 @@ elif args.model_type.lower() in ["lstm", "lstmtagger"]:
         input_size=args.lstm_input_size,
     )
 else: raise ValueError("model type not recognized")
-model.to(DEVICE)
+model = model.to(DEVICE)
 
 optimizer = optim.Adam(params=model.parameters(), 
     lr=BASE_LR,
