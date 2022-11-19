@@ -7,11 +7,10 @@ import math
 import numpy as np
 from typing import (Sequence, Iterable, Dict, Tuple, Callable, Optional)
 
-from dataset.dataset import NERDataset
-from torch.utils.data import DataLoader
-
 import logging
+import datetime as dt
 
+TODAY = dt.datetime.today().strftime("%Y-%m-%d")
 logging.basicConfig(filename="./log/exceptions.log")
 LOGGER = logging.getLogger()
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -22,12 +21,12 @@ class TransformerTagger(nn.Module):
         d_model: int=512,
         nhead: int=8,
         vocab_size: int=30000,
-        num_encoder_layers: int=8,
+        num_encoder_layers: int=10,
         num_decoder_layers: int=8,
         dim_feedforward: int=1024,
         dropout: float=.1,
         embedding_type: str="torch",
-        no_dense_layers: int=5,
+        num_dense_layers: int=5,
         activation: Callable=F.relu,
         batch_first: bool=True,
         layer_norm_eps: float=1e-4,
@@ -37,7 +36,7 @@ class TransformerTagger(nn.Module):
         super(TransformerTagger, self).__init__()
         assert d_model >= n_tags, "d_model must be higher than number of tags"
         self.d_model = d_model
-        self.no_dense_layers = no_dense_layers
+        self.no_dense_layers = num_dense_layers
         self.pad_token_idx = pad_token_idx
         self.positional_encoder = PositionalEncoder(d_model, dropout)
         self.embedding = WordEmbedding(vocab_size=vocab_size,
@@ -57,15 +56,15 @@ class TransformerTagger(nn.Module):
             norm_first=True,
         )
         increment = math.floor(
-            (d_model // n_tags) ** (1 / no_dense_layers)
+            (d_model // n_tags) ** (1 / num_dense_layers)
             )
         in_features, out_features = d_model, d_model // increment
-        for i in range(1, no_dense_layers):
+        for i in range(1, num_dense_layers):
             exec(f"""self.dense{i} = nn.Linear(in_features=in_features, 
                 out_features=out_features)""")
             in_features, out_features = out_features, \
                 out_features // increment
-        exec(f"""self.dense{no_dense_layers} = nn.Linear(in_features=in_features, 
+        exec(f"""self.dense{num_dense_layers} = nn.Linear(in_features=in_features, 
                 out_features=n_tags)""")
 
         self.softmax = nn.Softmax(dim=-1)
@@ -176,7 +175,4 @@ class WordEmbedding(nn.Module):
         
     def forward(self, x: torch.tensor):
         x_ = self.embedding(x)
-        # mask = torch.where(x==self.pad_token_idx, True, False)
-        # mask = mask.unsqueeze(0).permute(1, 2, 0).repeat(1, 1, self.embedding_dim)
-        # x_ = torch.masked_fill(x_, mask, value=torch.tensor(-1e3, dtype=torch.float64))
         return x_

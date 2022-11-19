@@ -1,3 +1,4 @@
+name: nertag_env
 channels:
   - defaults
   - conda-forge
@@ -62,4 +63,6 @@ dependencies:
   - pip:
     - tensorboard
     - seqeval
-prefix: /opt/miniconda3/envs/nertag_env
+prefix: 
+  - /opt/miniconda3/envs/
+  - /opt/anaconda3/envs/

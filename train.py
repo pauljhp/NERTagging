@@ -40,8 +40,8 @@ class_weights = torch.tensor(class_weights.sort_index().values).float()
 
 TODAY = dt.datetime.today().strftime("%Y-%m-%d")
 logger_path = Path(f"./log/exceptions_{TODAY}.log")
-if not logger_path.exists():
-    logger_path.parents.mkdir(parents=True)
+if not logger_path.parent.exists():
+    logger_path.parent.mkdir(parents=True)
 logging.basicConfig(filename=logger_path.as_posix())
 logger = logging.getLogger()
 
@@ -67,9 +67,9 @@ parser.add_argument("-c", "--checkpoint_dir", default=None)
 parser.add_argument("--nhead", type=int, default=8)
 parser.add_argument("--num_encoder_layers", type=int, default=8)
 parser.add_argument("--num_decoder_layers", type=int, default=8)
+parser.add_argument("--num_dense_layers", type=int, default=5)
 parser.add_argument("--lstm_input_size", type=int, default=64)
 parser.add_argument("--d_model", type=int, default=128)
-parser.add_argument("--no_dense_layers", type=int, default=5)
 parser.add_argument("--layer_norm_eps", type=float, default=1e-4)
 parser.add_argument("-v", "--verbose", action="store_true")
 parser.add_argument("--detect_anomaly", action="store_true")
