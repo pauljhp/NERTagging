@@ -38,6 +38,8 @@ class LSTMTagger(nn.Module):
         self.num_dense_layers = num_dense_layers
         self.pad_token_idx = pad_token_idx
         self.positional_encoder = PositionalEncoder(input_size, dropout)
+        num_directions = 2 if bidirectional else 1
+        assert d_model > input_size and d_model % input_size == 0, "d_model must be multiples of input_size!"
         self.embedding = WordEmbedding(vocab_size=vocab_size,
             embedding_dim=input_size,
             embedding=embedding_type, 
@@ -66,7 +68,7 @@ class LSTMTagger(nn.Module):
         increment = math.floor(
             (d_model // n_tags) ** (1 / num_dense_layers)
             )
-        in_features, out_features = d_model, d_model // increment
+        in_features, out_features = d_model * num_directions, d_model * num_directions // increment
         for i in range(1, num_dense_layers):
             exec(f"""self.dense{i} = nn.Linear(in_features=in_features, 
                 out_features=out_features)""")
@@ -74,7 +76,8 @@ class LSTMTagger(nn.Module):
                 out_features // increment
         exec(f"""self.dense{num_dense_layers} = nn.Linear(in_features=in_features, 
                 out_features=n_tags)""")
-
+        stride = int(d_model / input_size) * num_directions
+        self.avgpool = nn.AvgPool1d(kernel_size=stride, stride=stride, padding=0)
         self.softmax = nn.Softmax(dim=-1)
         self.logsoftmax = nn.LogSoftmax(dim=-1)
 
@@ -86,18 +89,21 @@ class LSTMTagger(nn.Module):
         input = self.positional_encoder(input)
         if mask is not None:
             mask = mask.unsqueeze(-1).repeat(1, 1, input.shape[-1])
-            mask = torch.where(mask, torch.tensor(float("-inf")), torch.tensor(0.))
+            mask = torch.where(mask, torch.tensor(- 2. ** 32), torch.tensor(0.))
             input += mask
-        encoder_output, encoder_h = self.LSTMEncoder(input)
+        encoder_output, (encoder_h, _) = self.LSTMEncoder(input)
+        print(input.shape)
+        print(encoder_output.shape, encoder_h.shape)
         if self.lstmdecoder_exists:
-            decoder_output = self.LSTMDecoder(encoder_output,
-                encoder_h)
+            decoder_input = self.avgpool(encoder_output)
+            print(decoder_input.shape)
+            decoder_output, _ = self.LSTMDecoder(decoder_input)
             dense_in = decoder_output
         else:
             dense_in = encoder_output
         dense_in = torch.clip(dense_in, min=-0.99999, max=0.99999)
         dense_in = torch.tanh(dense_in) # experiment with this
-        for i in range(1, self.no_dense_layers + 1):
+        for i in range(1, self.num_dense_layers + 1):
             out = eval(f"self.dense{i}(dense_in)")
             out = torch.tanh(out)
             # out = torch.clip(out, min=-0.99999, max=0.99999)

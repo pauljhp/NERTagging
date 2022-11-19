@@ -193,7 +193,7 @@ try:
             elif args.model_type.lower() in ["transformer", "transformertagger"]:
                 pred = model(src, src, mask)
             else: raise ValueError("model type not recognized")
-            print(mask.dtype, pred.dtype)
+            # print(mask.dtype, pred.dtype)
             loss = criterion(pred[~mask], tags[~mask])
             for j, (prd, truth, mk) in enumerate(zip(pred, tags, mask)):
                 # loss += criterion(prd[~mk], truth.masked_select(~mk).long())
