@@ -21,7 +21,7 @@ class LSTMTagger(nn.Module):
         num_decoder_layers: int=8,
         dropout: float=.1,
         embedding_type: str="torch",
-        no_dense_layers: int=5,
+        num_dense_layers: int=5,
         input_size: int=64, 
         activation: Callable=F.relu,
         batch_first: bool=True,
@@ -35,9 +35,9 @@ class LSTMTagger(nn.Module):
         self.lstmdecoder_exists = True if num_decoder_layers > 0 else False
         assert d_model >= n_tags, "d_model must be higher than number of tags"
         self.d_model = d_model
-        self.no_dense_layers = no_dense_layers
+        self.num_dense_layers = num_dense_layers
         self.pad_token_idx = pad_token_idx
-        self.positional_encoder = PositionalEncoder(d_model, dropout)
+        self.positional_encoder = PositionalEncoder(input_size, dropout)
         self.embedding = WordEmbedding(vocab_size=vocab_size,
             embedding_dim=input_size,
             embedding=embedding_type, 
@@ -64,15 +64,15 @@ class LSTMTagger(nn.Module):
                 bidirectional=bidirectional
             )
         increment = math.floor(
-            (d_model // n_tags) ** (1 / no_dense_layers)
+            (d_model // n_tags) ** (1 / num_dense_layers)
             )
         in_features, out_features = d_model, d_model // increment
-        for i in range(1, no_dense_layers):
+        for i in range(1, num_dense_layers):
             exec(f"""self.dense{i} = nn.Linear(in_features=in_features, 
                 out_features=out_features)""")
             in_features, out_features = out_features, \
                 out_features // increment
-        exec(f"""self.dense{no_dense_layers} = nn.Linear(in_features=in_features, 
+        exec(f"""self.dense{num_dense_layers} = nn.Linear(in_features=in_features, 
                 out_features=n_tags)""")
 
         self.softmax = nn.Softmax(dim=-1)

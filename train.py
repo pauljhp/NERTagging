@@ -84,10 +84,10 @@ runno = args.runno
 minibatch_size = args.minibatch_size
 save_every = args.save_every
 
-SAVE_DIR = f"./checkpoints/{args.model_type}_dim{args.d_model}_d{args.no_dense_layers}_{TODAY}_runno{runno}.pt"
+SAVE_DIR = f"./checkpoints/{args.model_type}_dim{args.d_model}_d{args.num_dense_layers}_{TODAY}_runno{runno}.pt"
 save_dir = args.checkpoint_dir if args.checkpoint_dir else SAVE_DIR
 log_dir = Path(log_dir).joinpath(
-        f"{TODAY}/{args.model_type}_runno_{runno}_lr{base_lr:.6f}_{max_epochs}epochs_{args.d_model}dims_{args.no_dense_layers}denselayers_{args.nhead}heads")
+        f"{TODAY}/{args.model_type}_runno_{runno}_lr{base_lr:.6f}_{max_epochs}epochs_{args.d_model}dims_{args.num_dense_layers}denselayers_{args.nhead}heads")
 torch.autograd.set_detect_anomaly(args.detect_anomaly)
 torch.cuda.amp.autocast(enabled=args.enable_autocast)
 
@@ -145,7 +145,7 @@ if args.model_type.lower() in ["transformer", "tranformertagger"]:
         activation=torch.tanh,
         nhead=args.nhead, 
         batch_first=True, 
-        no_dense_layers=args.no_dense_layers,
+        num_dense_layers=args.num_dense_layers,
         pad_token_idx=train_data._tokenidx.get(train_data.pad_token)
     )
 elif args.model_type.lower() in ["lstm", "lstmtagger"]:
@@ -155,7 +155,7 @@ elif args.model_type.lower() in ["lstm", "lstmtagger"]:
         layer_norm_eps=args.layer_norm_eps,
         activation=torch.tanh,
         batch_first=True, 
-        no_dense_layers=args.no_dense_layers,
+        num_dense_layers=args.num_dense_layers,
         pad_token_idx=train_data._tokenidx.get(train_data.pad_token),
         num_decoder_layers=args.num_decoder_layers,
         num_encoder_layers=args.num_encoder_layers,
@@ -184,7 +184,10 @@ try:
             print(f"iter_no{i}")
             optimizer.zero_grad()
             idx, src, tag_prob, tags, mask = data
-            pred = model(src, src, mask)    
+            if args.model_type.lower() in ["lstm", "lstmtagger"]:
+                pred = model(src, mask)
+            elif args.model_type.lower() in ["transformer", "transformertagger"]:
+                pred = model(src, src, mask),     
             loss = criterion(pred[~mask], tags[~mask])
             for j, (prd, truth, mk) in enumerate(zip(pred, tags, mask)):
                 # loss += criterion(prd[~mk], truth.masked_select(~mk).long())
