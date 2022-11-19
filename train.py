@@ -99,10 +99,10 @@ WRITER = SummaryWriter(
         )
 
 
-f1 = F1Score(num_classes=train_data.ntargets, threshold=0.5)
-accu = Accuracy(threshold=0.5, num_classes=train_data.ntargets)
-precision = Precision(num_classes=train_data.ntargets)
-recall = Recall(num_classes=train_data.ntargets, threshold=0.5)
+f1 = F1Score(num_classes=train_data.ntargets, threshold=0.5).to(DEVICE)
+accu = Accuracy(threshold=0.5, num_classes=train_data.ntargets).to(DEVICE)
+precision = Precision(num_classes=train_data.ntargets).to(DEVICE)
+recall = Recall(num_classes=train_data.ntargets, threshold=0.5).to(DEVICE)
 
 feature_padding_value = train_data._tokenidx.get(train_data.pad_token)
 tag_padding_value = train_data._targetidx.get(train_data.pad_token)
@@ -175,6 +175,7 @@ optimizer = optim.Adam(params=model.parameters(),
 criterion = nn.CrossEntropyLoss(ignore_index=0, 
     weight=class_weights, 
     reduction='mean')
+criterion = criterion.to(DEVICE)
 start = time.time()
 
 global_step = 0
@@ -195,7 +196,7 @@ try:
                 pred = model(src.to(DEVICE), src.to(DEVICE), mask.to(DEVICE))
             else: raise ValueError("model type not recognized")
             # print(mask.dtype, pred.dtype)
-            loss = criterion(pred[~mask], tags[~mask])
+            loss = criterion(pred[~mask].to(DEVICE), tags[~mask].to(DEVICE))
             for j, (prd, truth, mk) in enumerate(zip(pred, tags, mask)):
                 # loss += criterion(prd[~mk], truth.masked_select(~mk).long())
                 train_precision += precision(prd[~mk], truth.masked_select(~mk).long()).item()
