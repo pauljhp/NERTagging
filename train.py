@@ -26,7 +26,7 @@ import pandas as pd
 
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
+if torch.cuda.is_available(): torch.cuda.empty_cache()
 train_data = NERDataset(tokenizer="spacy", cased=False, mode='train')
 # test_data = NERDataset(tokenizer="spacy", cased=False, mode='test')
 val_data = NERDataset(tokenizer="spacy", cased=False, mode='valid')
