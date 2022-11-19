@@ -1,10 +1,63 @@
 name: nertag_env
 channels:
   - defaults
-  - conda-forge
 dependencies:
   - python=3.8
-  - conda-forge::pytorch-lightning
-  - conda-forge::transformers
-  - defai;ts::pandas
+  - pytorch-lightning
+  - transformers
+  - pandas
+  - spacy
+  - executing
+  - ca-certificates
+  - jupyter_core
+  - jedi
+  - ncurses
+  - python-dateutil
+  - stack_data
+  - ptyprocess
+  - six
+  - pyparsing
+  - setuptools
+  - jupyter_client
+  - pure_eval
+  - parso
+  - sqlite
+  - xz
+  - zeromq
+  - psutil
+  - asttokens
+  - pygments
+  - appnope
+  - traitlets
+  - wcwidth
+  - tornado
+  - libcxx
+  - libsodium
+  - zlib
+  - pyzmq
+  - prompt-toolkit
+  - decorator
+  - matplotlib-inline
+  - pip
+  - libffi
+  - debugpy
+  - entrypoints
+  - openssl
+  - readline
+  - ipython
+  - wheel
+  - nest-asyncio
+  - backcall
+  - pickleshare
+  - pexpect
+  - packaging
+  - certifi
+  - tk
+  - ipykernel
+  - jupyter
+  - ipywidgets
+  - matplotlib
+  - pip:
+    - tensorboard
+    - seqeval
 prefix: /opt/miniconda3/envs/nertag_env
