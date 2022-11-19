@@ -25,7 +25,7 @@ import itertools
 import pandas as pd
 
 
-
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 train_data = NERDataset(tokenizer="spacy", cased=False, mode='train')
 # test_data = NERDataset(tokenizer="spacy", cased=False, mode='test')
@@ -161,6 +161,7 @@ elif args.model_type.lower() in ["lstm", "lstmtagger"]:
         num_encoder_layers=args.num_encoder_layers,
         input_size=args.lstm_input_size,
     )
+model.to(DEVICE)
 
 optimizer = optim.Adam(params=model.parameters(), 
     lr=BASE_LR,
@@ -275,4 +276,3 @@ try:
 
 except RuntimeError as exception:
     logger.exception(msg=f"{exception}\n-----\nduring the following dataset id: {idx}\n=======\n")
-    logger.info(msg=f"output: {pred}")
