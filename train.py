@@ -189,9 +189,9 @@ try:
             optimizer.zero_grad()
             idx, src, tag_prob, tags, mask = data
             if args.model_type.lower() in ["lstm", "lstmtagger"]:
-                pred = model(src, mask)
+                pred = model(src.to(DEVICE), mask.to(DEVICE))
             elif args.model_type.lower() in ["transformer", "transformertagger"]:
-                pred = model(src, src, mask)
+                pred = model(src.to(DEVICE), src.to(DEVICE), mask.to(DEVICE))
             else: raise ValueError("model type not recognized")
             # print(mask.dtype, pred.dtype)
             loss = criterion(pred[~mask], tags[~mask])
