@@ -88,10 +88,10 @@ class LSTMTagger(nn.Module):
             mask = mask.unsqueeze(-1).repeat(1, 1, input.shape[-1])
             mask = torch.where(mask, torch.tensor(float("-inf")), torch.tensor(0.))
             input += mask
-        encoder_output, encoder_h, encoder_c = self.LSTMEncoder(input)
+        encoder_output, encoder_h = self.LSTMEncoder(input)
         if self.lstmdecoder_exists:
             decoder_output = self.LSTMDecoder(encoder_output,
-                encoder_h, encoder_c)
+                encoder_h)
             dense_in = decoder_output
         else:
             dense_in = encoder_output

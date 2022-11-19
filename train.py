@@ -161,6 +161,7 @@ elif args.model_type.lower() in ["lstm", "lstmtagger"]:
         num_encoder_layers=args.num_encoder_layers,
         input_size=args.lstm_input_size,
     )
+else: raise ValueError("model type not recognized")
 model.to(DEVICE)
 
 optimizer = optim.Adam(params=model.parameters(), 
@@ -188,7 +189,8 @@ try:
             if args.model_type.lower() in ["lstm", "lstmtagger"]:
                 pred = model(src, mask)
             elif args.model_type.lower() in ["transformer", "transformertagger"]:
-                pred = model(src, src, mask),     
+                pred = model(src, src, mask)
+            else: raise ValueError("model type not recognized")
             loss = criterion(pred[~mask], tags[~mask])
             for j, (prd, truth, mk) in enumerate(zip(pred, tags, mask)):
                 # loss += criterion(prd[~mk], truth.masked_select(~mk).long())
@@ -275,4 +277,4 @@ try:
             counter = 0.
 
 except RuntimeError as exception:
-    logger.exception(msg=f"{exception}\n-----\nduring the following dataset id: {idx}\n=======\n")
+    logger.exception(msg=f"{exception}\n-----\nduring the following: {log_dir.as_posix()} epoch{epoch}\n=======\n")
