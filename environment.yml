@@ -1,12 +1,14 @@
-name: nertag_env
 channels:
   - defaults
+  - conda-forge
+  - pytorch
 dependencies:
   - python=3.8
-  - pytorch-lightning
-  - transformers
+  - conda-forge::pytorch-lightning
+  - conda-forge::transformers
+  - pytorch::pytorch
   - pandas
-  - spacy
+  - conda-forge::spacy
   - executing
   - ca-certificates
   - jupyter_core
