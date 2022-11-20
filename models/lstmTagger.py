@@ -41,7 +41,7 @@ class LSTMTagger(nn.Module):
         self.pad_token_idx = pad_token_idx
         self.positional_encoder = PositionalEncoder(input_size, dropout)
         num_directions = 2 if bidirectional else 1
-        assert d_model > input_size and d_model % input_size == 0, "d_model must be multiples of input_size!"
+        assert d_model >= input_size and d_model % input_size == 0, "d_model must be multiples of input_size!"
         self.embedding = WordEmbedding(vocab_size=vocab_size,
             embedding_dim=input_size,
             embedding=embedding_type, 

@@ -252,7 +252,10 @@ try:
             counter = 0.
             for i, data in enumerate(val_dataloader):
                 idx, src, tag_prob, tags, mask = data
-                pred = model(src, src, mask)
+                if args.model_type.lower() in ["lstm", "lstmtagger"]:
+                    pred = model(src.to(DEVICE), mask.to(DEVICE))
+                elif args.model_type.lower() in ["transformer", "transformertagger"]:
+                    pred = model(src.to(DEVICE), src.to(DEVICE), mask.to(DEVICE))
                 for j, (prd, truth, mk) in enumerate(zip(pred, tags, mask)):
                     train_precision += precision(prd[~mk], truth.masked_select(~mk).long()).item()
                     train_recall += recall(prd[~mk], truth.masked_select(~mk).long()).item()

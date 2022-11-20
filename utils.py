@@ -33,3 +33,9 @@ def pad_target_prob(
     target_mask = torch.cat(mask, dim=0).reshape(
         batch_size, max_len, n_classes,)
     return target_prob_, target_mask[slice(None), slice(None), 0]
+
+def get_num_params(model: torch.nn.Module) -> int:
+    """get the number of parameters in a model"""
+    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+    params = sum([np.prod(p.size()) for p in model_parameters])
+    return params
