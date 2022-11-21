@@ -2,13 +2,13 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 import math
 import numpy as np
 from typing import (Sequence, Iterable, Dict, Tuple, Callable, Optional)
-
 import logging
 import datetime as dt
+from models.embedding import WordEmbedding
+
 
 TODAY = dt.datetime.today().strftime("%Y-%m-%d")
 logging.basicConfig(filename="./log/exceptions.log")
@@ -141,38 +141,38 @@ def scaled_dot_product_attention(q, k, v, mask=None) -> Tuple[torch.tensor, torc
     values = torch.matmul(attention, v)
     return values, attention
 
-def get_embedder(embedding: str="torch", **kwargs):
-    if embedding in ["torch", "pytorch"]:
-        embedder = nn.Embedding(**kwargs)
-    elif embedding in ["glove"]:
-        raise NotImplementedError
-    else:
-        raise NotImplementedError
-    return embedder
+# def get_embedder(embedding: str="torch", **kwargs):
+#     if embedding in ["torch", "pytorch"]:
+#         embedder = nn.Embedding(**kwargs)
+#     elif embedding in ["glove"]:
+#         raise NotImplementedError
+#     else:
+#         raise NotImplementedError
+#     return embedder
 
-class WordEmbedding(nn.Module):
-    def __init__(self, 
-        vocab_size: int,
-        embedding_dim: int,
-        pad_token_idx: int,
-        embedding: str="torch",
-        ):
-        """
-        :param vocab_size: vocabulary size
-        :param embedding_dim: dimensionality of the embeddings
-        :param embedding: str, takes "torch", "glove", "pytorch" 
-            (same as "torch"), and "bert"
-        """
-        super(WordEmbedding, self).__init__()
-        self.embedding = get_embedder(embedding, 
-            num_embeddings=vocab_size, 
-            embedding_dim=embedding_dim,
-            padding_idx=pad_token_idx,
-            max_norm=1e2,
-            norm_type=2.0)
-        self.embedding_dim = embedding_dim
-        self.pad_token_idx = pad_token_idx
+# class WordEmbedding(nn.Module):
+#     def __init__(self, 
+#         vocab_size: int,
+#         embedding_dim: int,
+#         pad_token_idx: int,
+#         embedding: str="torch",
+#         ):
+#         """
+#         :param vocab_size: vocabulary size
+#         :param embedding_dim: dimensionality of the embeddings
+#         :param embedding: str, takes "torch", "glove", "pytorch" 
+#             (same as "torch"), and "bert"
+#         """
+#         super(WordEmbedding, self).__init__()
+#         self.embedding = get_embedder(embedding, 
+#             num_embeddings=vocab_size, 
+#             embedding_dim=embedding_dim,
+#             padding_idx=pad_token_idx,
+#             max_norm=1e2,
+#             norm_type=2.0)
+#         self.embedding_dim = embedding_dim
+#         self.pad_token_idx = pad_token_idx
         
-    def forward(self, x: torch.tensor):
-        x_ = self.embedding(x)
-        return x_
+#     def forward(self, x: torch.tensor):
+#         x_ = self.embedding(x)
+#         return x_

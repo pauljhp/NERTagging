@@ -1,6 +1,10 @@
 # logs
 /log
 
+# large data files
+/embeddings/glove
+*.zip
+
 # checkpoints
 /checkpoints
 

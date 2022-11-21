@@ -25,19 +25,6 @@ import itertools
 import pandas as pd
 
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-if torch.cuda.is_available(): torch.cuda.empty_cache()
-train_data = NERDataset(tokenizer="spacy", cased=False, mode='train')
-# test_data = NERDataset(tokenizer="spacy", cased=False, mode='test')
-val_data = NERDataset(tokenizer="spacy", cased=False, mode='valid')
-
-# for countering the umbalanced classes
-class_weights = pd.Series(Counter(itertools.chain(*[[i.item() for i in t] 
-    for t in train_data.data.target_idx])))
-class_weights = 1 / (class_weights ** 1)
-class_weights.loc[0] = 0
-class_weights = torch.tensor(class_weights.sort_index().values).float()
-
 TODAY = dt.datetime.today().strftime("%Y-%m-%d")
 logger_path = Path(f"./log/exceptions_{TODAY}.log")
 if not logger_path.parent.exists():
@@ -52,7 +39,7 @@ MAX_EPOCHS = 20
 LOG_DIR = "./log/traininglog/"
 MINIBATCH_SIZE = 16
 SAVE_EVERY = 5
-
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 parser = ArgumentParser()
 parser.add_argument("-b", "--batch_size", type=int, default=256)
@@ -66,6 +53,7 @@ parser.add_argument("-s", "--save_every", default=SAVE_EVERY)
 parser.add_argument("-c", "--checkpoint_dir", default=None)
 parser.add_argument("--nhead", type=int, default=8)
 parser.add_argument("--num_encoder_layers", type=int, default=8)
+parser.add_argument("--embedding_type", type=str, default="torch")
 parser.add_argument("--num_decoder_layers", type=int, default=8)
 parser.add_argument("--num_dense_layers", type=int, default=5)
 parser.add_argument("--lstm_input_size", type=int, default=64)
@@ -91,6 +79,19 @@ log_dir = Path(log_dir).joinpath(
 torch.autograd.set_detect_anomaly(args.detect_anomaly)
 torch.cuda.amp.autocast(enabled=args.enable_autocast)
 
+
+
+if torch.cuda.is_available(): torch.cuda.empty_cache()
+train_data = NERDataset(tokenizer=args.embedding_type, cased=False, mode='train')
+# test_data = NERDataset(tokenizer="spacy", cased=False, mode='test')
+val_data = NERDataset(tokenizer=args.embedding_type, cased=False, mode='valid')
+
+# for countering the umbalanced classes
+class_weights = pd.Series(Counter(itertools.chain(*[[i.item() for i in t] 
+    for t in train_data.data.target_idx])))
+class_weights = 1 / (class_weights ** 1)
+class_weights.loc[0] = 0
+class_weights = torch.tensor(class_weights.sort_index().values).float()
 
 if not log_dir.parent.exists():
     log_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -144,6 +145,7 @@ if args.model_type.lower() in ["transformer", "tranformertagger"]:
         layer_norm_eps=args.layer_norm_eps,
         num_decoder_layers=args.num_decoder_layers,
         num_encoder_layers=args.num_encoder_layers,
+        embedding_type=args.embedding_type,
         activation=torch.tanh,
         nhead=args.nhead, 
         batch_first=True, 
@@ -157,6 +159,7 @@ elif args.model_type.lower() in ["lstm", "lstmtagger"]:
         layer_norm_eps=args.layer_norm_eps,
         activation=torch.tanh,
         batch_first=True, 
+        embedding_type=args.embedding_type,
         num_dense_layers=args.num_dense_layers,
         pad_token_idx=train_data._tokenidx.get(train_data.pad_token),
         num_decoder_layers=args.num_decoder_layers,
@@ -197,6 +200,8 @@ try:
             else: raise ValueError("model type not recognized")
             # print(mask.dtype, pred.dtype)
             loss = criterion(pred[~mask].to(DEVICE), tags[~mask].to(DEVICE))
+            loss.backward()
+            optimizer.step()
             for j, (prd, truth, mk) in enumerate(zip(pred, tags, mask)):
                 # loss += criterion(prd[~mk], truth.masked_select(~mk).long())
                 train_precision += precision(prd[~mk], truth.masked_select(~mk).long()).item()
@@ -204,8 +209,6 @@ try:
                 train_f1 += f1(prd[~mk], truth.masked_select(~mk).long()).item()
                 train_accu += accu(prd[~mk], truth.masked_select(~mk).long()).item()
                 counter += 1
-            loss.backward()
-            optimizer.step()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 
                 max_norm=1e2, 
                 norm_type=2.0, 

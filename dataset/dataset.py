@@ -15,6 +15,8 @@ from spacy.tokenizer import Tokenizer
 import itertools
 import utils
 import datetime as dt
+import re
+from models.embedding import load_glove_embeddings
 
 
 TODAY = dt.datetime.today().strftime("%Y-%m-%d")
@@ -42,6 +44,15 @@ class NERDataset(Dataset):
             for sent in sentences if sent.get("DOCSTART")])
         sentences.index = range(sentences.shape[0])
         return sentences
+    
+    def preprocess_tokens(self, data: pd.DataFrame, token_col: str="DOCSTART"):
+        """clean up special tokens"""
+        # replace numbers
+        data.loc[:, token_col].apply(
+            lambda x: [re.sub("(\d+)", "<NUM>", i) for i in x])
+        data.loc[:, token_col].apply(
+            lambda x: re.sub("((([\d\w]+)(\-))|(([\d\w]+)))+", "<SPEC>", x)
+        )
 
     def __init__(self, 
         data_path: str="./data/conll2003", 
@@ -52,9 +63,8 @@ class NERDataset(Dataset):
         unk_token: str="<UNK>",
         pad_token: str="<PAD>",
         from_vocab: Optional[str]="./embeddings/spacy_train_uncased_2022-11-13.json",
-        # max_token_len: int=128,
         dtype: torch.dtype=torch.long,
-        float_dtype: torch.dtype=torch.float32
+        float_dtype: torch.dtype=torch.float32,
         ):
         """
         :param target_col: Takes 'X' for CFG parsing tasks or 'O' for NER tasks
@@ -70,21 +80,35 @@ class NERDataset(Dataset):
         # self.max_token_len = max_token_len
         self.pad_token, self.unk_token = pad_token, unk_token
         self.tokens = set(itertools.chain(*self.data.DOCSTART.values))
-        if from_vocab:
-            self._tokenidx, self._vocab = self._get_vocabulary(from_vocab, cased, tokenizer)
+        if tokenizer is None: tokenizer = "pytorch"
+        if tokenizer in ["pytorch", "torch"]:
+            if from_vocab:
+                self._tokenidx, self._vocab = self._get_vocabulary(from_vocab, cased, tokenizer)
+                self.vocab_size = len(self._vocab) + 2
+                self._token_lookup = pd.Series(self._tokenidx).sort_values().index
+            else:
+                self._vocab = self._get_vocabulary(from_vocab, cased, tokenizer)
+                self.vocab_size = len(self._vocab) + 2 # add <UNK> and <PAD>
+                self._token_lookup = list(self._vocab) #+ [self.unk_token, self.pad_token]
+                self._tokenidx = dict([(tok, i) for i, tok in enumerate(self._token_lookup)])
+                self._tokenidx.update({unk_token: len(self._vocab) + 2, 
+                    pad_token: len(self._vocab) + 1}) # assign -inf to <PAD>
+                self._token_lookup.append(unk_token)
+                self._token_lookup.append(pad_token)
+                with Path(f"./embeddings/{tokenizer}_{mode}_{'cased' if cased else 'uncased'}_{TODAY}").open("w") as f:
+                    json.dump(self._tokenidx, f)
+        elif tokenizer in ["glove"]:
+            glove = load_glove_embeddings()
+            self._vocab = set(glove.keys())
             self.vocab_size = len(self._vocab) + 2
+            self._tokenidx = dict([(tok, i) for i, tok in enumerate(glove.keys())])
+            self._tokenidx.update(
+                {self.unk_token: len(self._vocab), 
+                self.pad_token: len(self._vocab) + 1})
             self._token_lookup = pd.Series(self._tokenidx).sort_values().index
-        else:
-            self._vocab = self._get_vocabulary(from_vocab, cased, tokenizer)
-            self.vocab_size = len(self._vocab) + 2 # add <UNK> and <PAD>
-            self._token_lookup = list(self._vocab) #+ [self.unk_token, self.pad_token]
-            self._tokenidx = dict([(tok, i) for i, tok in enumerate(self._token_lookup)])
-            self._tokenidx.update({unk_token: len(self._vocab) + 1, 
-                pad_token: len(self._vocab) + 2}) # assign -inf to <PAD>
-            self._token_lookup.append(unk_token)
-            self._token_lookup.append(pad_token)
-            with Path(f"./embeddings/{tokenizer}_{mode}_{'cased' if cased else 'uncased'}_{TODAY}").open("w") as f:
-                json.dump(self._tokenidx, f)
+
+
+
         targetidx_path = Path("./embeddings/nertag_idx.json")
         if targetidx_path.exists():
             with targetidx_path.open("r") as f:
@@ -153,12 +177,9 @@ class NERDataset(Dataset):
                 return [t.doc.text for t in tokens]
             else:
                 return [t.doc.text.lower() for t in tokens]
-        elif tokenizer in ["bert"]:
-            if cased:
-                bert_tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
-            else:
-                bert_tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-            return bert_tokenizer(list(self.tokens))
+        elif tokenizer in ["glove"]:
+            glove = load_glove_embeddings()
+            return [token if token in glove.keys() else self.unk_token for token in tokens]
         else:
             raise NotImplementedError(f"unrecognized tokenizer {tokenizer}")
 

@@ -1,6 +1,8 @@
 import torch
 import numpy as np
-from typing import Union, Sequence
+from typing import Union, Sequence, Any, Optional
+import itertools
+
 
 def tagidx_to_prob(tagidx: Sequence[int], ntags: int, dtype: torch.long):
     return torch.tensor(
@@ -39,3 +41,12 @@ def get_num_params(model: torch.nn.Module) -> int:
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     params = sum([np.prod(p.size()) for p in model_parameters])
     return params
+
+def iter_by_chunk(iterable: Any, chunk_size: int):
+    """iterate by chunk size"""
+    it = iter(iterable)
+    while True:
+        chunk = tuple(itertools.islice(it, chunk_size))
+        if not chunk:
+            break
+        yield chunk
