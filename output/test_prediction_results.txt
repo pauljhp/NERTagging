@@ -1,4 +1,4 @@
-doc_id original_tokens tokens prediction truth
+DOCSTAT PREDICTION GROUND_TRUTH
 soccer O O
 - O O
 japan B-LOC B-LOC

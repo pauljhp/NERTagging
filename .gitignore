@@ -1,9 +1,12 @@
 # logs
-/log
+log/
 
 # large data files
-/embeddings/glove
+embeddings/glove/
 *.zip
+
+# Output datafiles
+output/
 
 # checkpoints
 /checkpoints
