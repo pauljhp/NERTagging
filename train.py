@@ -54,6 +54,7 @@ parser.add_argument("-c", "--checkpoint_dir", default=None)
 parser.add_argument("--nhead", type=int, default=8)
 parser.add_argument("--num_encoder_layers", type=int, default=8)
 parser.add_argument("--embedding_type", type=str, default="torch")
+parser.add_argument("--freeze_embedding_params", action="store_true")
 parser.add_argument("--num_decoder_layers", type=int, default=8)
 parser.add_argument("--num_dense_layers", type=int, default=5)
 parser.add_argument("--lstm_input_size", type=int, default=64)
@@ -199,6 +200,9 @@ try:
                 pred = model(src.to(DEVICE), src.to(DEVICE), mask.to(DEVICE))
             else: raise ValueError("model type not recognized")
             # print(mask.dtype, pred.dtype)
+            if args.freeze_embedding_params:
+                for param in model.embedding.parameters():
+                    param.require_grad = False # freeze embedding weights
             loss = criterion(pred[~mask].to(DEVICE), tags[~mask].to(DEVICE))
             loss.backward()
             optimizer.step()
@@ -250,7 +254,7 @@ try:
             save_p = save_p.parent.joinpath(f"{save_p.stem}_epoch{epoch}.pt")
             torch.save(model.state_dict(), f=save_p.as_posix())
             model.eval()
-            running_loss, running_precision, running_recall, running_f1, running_accu \
+            test_loss, test_precision, test_recall, test_f1, test_accu \
                 = 0., 0., 0., 0., 0.
             counter = 0.
             for i, data in enumerate(val_dataloader):
@@ -260,10 +264,10 @@ try:
                 elif args.model_type.lower() in ["transformer", "transformertagger"]:
                     pred = model(src.to(DEVICE), src.to(DEVICE), mask.to(DEVICE))
                 for j, (prd, truth, mk) in enumerate(zip(pred, tags, mask)):
-                    train_precision += precision(prd[~mk], truth.masked_select(~mk).long()).item()
-                    train_recall += recall(prd[~mk], truth.masked_select(~mk).long()).item()
-                    train_f1 += f1(prd[~mk], truth.masked_select(~mk).long()).item()
-                    train_accu += accu(prd[~mk], truth.masked_select(~mk).long()).item()
+                    test_precision += precision(prd[~mk], truth.masked_select(~mk).long()).item()
+                    test_recall += recall(prd[~mk], truth.masked_select(~mk).long()).item()
+                    test_f1 += f1(prd[~mk], truth.masked_select(~mk).long()).item()
+                    test_accu += accu(prd[~mk], truth.masked_select(~mk).long()).item()
                     counter += 1
                 # if i % minibatch_size == minibatch_size - 1:
                 if args.verbose:
@@ -283,9 +287,9 @@ try:
                 WRITER.add_scalar("val/accuracy", running_accu / counter,
                     walltime=time.time()-start,
                     global_step=global_step)
-            running_loss, running_precision, running_recall, running_f1, running_accu \
+            test_loss, test_precision, test_recall, test_f1, test_accu  \
             = 0., 0., 0., 0., 0.
             counter = 0.
 
 except RuntimeError as exception:
-    logger.exception(msg=f"{exception}\n-----\nduring the following: {log_dir.as_posix()} epoch{epoch}\n=======\n")
+    logger.exception(msg=f"{exception}\n-----\nduring the following: {log_dir.as_posix()} epoch{epoch}\n=======\n\n")
