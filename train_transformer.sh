@@ -1,5 +1,5 @@
 conda run -n nertag_env --no-capture-output \
-    python train.py --runno 2 \
+    python train.py --runno 3 \
         --model_type transformer \
         --max_epochs 100 \
         --base_lr 0.0005 \

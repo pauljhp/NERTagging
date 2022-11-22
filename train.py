@@ -271,20 +271,17 @@ try:
                     counter += 1
                 # if i % minibatch_size == minibatch_size - 1:
                 if args.verbose:
-                    print(f"epoch{epoch}, iter{i}; validation_loss={running_loss};\nvalidation_precision={running_precision / counter}")
-                WRITER.add_scalar("val/loss", running_loss, 
+                    print(f"epoch{epoch}, iter{i};\nvalidation_precision={test_precision / counter}")
+                WRITER.add_scalar("val/precision", test_precision / counter,
                     walltime=time.time()-start,
                     global_step=global_step)
-                WRITER.add_scalar("val/precision", running_precision / counter,
+                WRITER.add_scalar("val/recall", test_recall / counter,
                     walltime=time.time()-start,
                     global_step=global_step)
-                WRITER.add_scalar("val/recall", running_recall / counter,
+                WRITER.add_scalar("val/f1", test_f1 / counter,
                     walltime=time.time()-start,
                     global_step=global_step)
-                WRITER.add_scalar("val/f1", running_f1 / counter,
-                    walltime=time.time()-start,
-                    global_step=global_step)
-                WRITER.add_scalar("val/accuracy", running_accu / counter,
+                WRITER.add_scalar("val/accuracy", test_accu / counter,
                     walltime=time.time()-start,
                     global_step=global_step)
             test_loss, test_precision, test_recall, test_f1, test_accu  \
